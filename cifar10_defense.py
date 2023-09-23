@@ -1,3 +1,5 @@
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 import os
 import argparse
@@ -17,8 +19,8 @@ from learning.wideresnet import WideResNet, WideResNetBD, WideResNetMed_SSL, WRN
 from learning.preactresnet import PreActResNet18Mhead, Res18_out3_model, Res18_out4_model, Res18_out5_model,Res18_out6_model
 from utils import *
 
-mu = torch.tensor(cifar10_mean).view(3,1,1).cuda()
-std = torch.tensor(cifar10_std).view(3,1,1).cuda()
+mu = torch.tensor(cifar10_mean).view(3,1,1)
+std = torch.tensor(cifar10_std).view(3,1,1)
 
 # def normalize(X):
 #     return (X - mu)/std
@@ -59,7 +61,7 @@ def attack_constrastive_Mhead(model, model_ssl, scripted_transforms, criterion, 
                mixup=False, y_a=None, y_b=None, lam=None, Ltype=None, reverse=False, n_views=2):
     """Reverse algorithm that optimize the SSL loss via PGD"""
 
-    delta = torch.zeros_like(X).cuda()
+    delta = torch.zeros_like(X)
     if norm == "l_inf":
         delta.uniform_(-epsilon, epsilon)
     elif norm == "l_2":
@@ -113,11 +115,11 @@ def constrastive_loss_func(contrastive_head, criterion, bs, n_views):
 
     labels = torch.cat([torch.arange(bs) for i in range(n_views)], dim=0)
     labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
-    labels = labels.cuda()
+    labels = labels
 
     similarity_matrix = torch.matmul(features, features.T)
 
-    mask = torch.eye(labels.shape[0], dtype=torch.bool).cuda()
+    mask = torch.eye(labels.shape[0], dtype=torch.bool)
     labels = labels[~mask].view(labels.shape[0], -1)
     similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
 
@@ -128,7 +130,7 @@ def constrastive_loss_func(contrastive_head, criterion, bs, n_views):
     negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
 
     logits = torch.cat([positives, negatives], dim=1)
-    labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
+    labels = torch.zeros(logits.shape[0], dtype=torch.long)
 
     temperature = 0.2
     logits = logits / temperature
@@ -191,10 +193,10 @@ def adaptive_attack_pgd(model, X, y, c_head_model, scripted_transforms, criterio
                mixup=False, y_a=None, y_b=None, lam=None, n_views=2, lambda_S=1):
     """Defense Aware Attack, where the attacker optimizes to both fool the classifier and decrease contrastive loss,
     So that our reverse algorithm cannot reverse the attack via decreasing the contrastive loss further."""
-    max_loss = torch.zeros(y.shape[0]).cuda()
-    max_delta = torch.zeros_like(X).cuda()
+    max_loss = torch.zeros(y.shape[0])
+    max_delta = torch.zeros_like(X)
     for _ in range(restarts):
-        delta = torch.zeros_like(X).cuda()
+        delta = torch.zeros_like(X)
         if norm == "l_inf":
             delta.uniform_(-epsilon, epsilon)
         elif norm == "l_2":
@@ -246,10 +248,10 @@ def adaptive_attack_pgd(model, X, y, c_head_model, scripted_transforms, criterio
 def attack_BIM(model, X, y, epsilon, alpha, attack_iters, restarts,
                norm, early_stop=False,
                mixup=False, y_a=None, y_b=None, lam=None):
-    max_loss = torch.zeros(y.shape[0]).cuda()
-    max_delta = torch.zeros_like(X).cuda()
+    max_loss = torch.zeros(y.shape[0])
+    max_delta = torch.zeros_like(X)
     for _ in range(restarts):
-        delta = torch.zeros_like(X).cuda()
+        delta = torch.zeros_like(X)
         # if norm == "l_inf":
         #     delta.uniform_(-epsilon, epsilon)
         # elif norm == "l_2":
@@ -302,10 +304,10 @@ def attack_BIM(model, X, y, epsilon, alpha, attack_iters, restarts,
 def attack_pgd(model, X, y, epsilon, alpha, attack_iters, restarts,
                norm, early_stop=False,
                mixup=False, y_a=None, y_b=None, lam=None):
-    max_loss = torch.zeros(y.shape[0]).cuda()
-    max_delta = torch.zeros_like(X).cuda()
+    max_loss = torch.zeros(y.shape[0])
+    max_delta = torch.zeros_like(X)
     for _ in range(restarts):
-        delta = torch.zeros_like(X).cuda()
+        delta = torch.zeros_like(X)
         if norm == "l_inf":
             delta.uniform_(-epsilon, epsilon)
         elif norm == "l_2":
@@ -375,12 +377,12 @@ def one_hot_embedding(labels, num_classes):
 def attack_CW(model, X, y, epsilon, alpha, attack_iters, restarts,
                norm, early_stop=False,
                mixup=False, y_a=None, y_b=None, lam=None, num_class=10):
-    max_loss = torch.zeros(y.shape[0]).cuda()
-    max_delta = torch.zeros_like(X).cuda()
+    max_loss = torch.zeros(y.shape[0])
+    max_delta = torch.zeros_like(X)
 
     batchsize=X.size(0)
     for _ in range(restarts):
-        delta = torch.zeros_like(X).cuda()
+        delta = torch.zeros_like(X)
         if norm == "l_inf":
             delta.uniform_(-epsilon, epsilon)
         elif norm == "l_2":
@@ -403,7 +405,7 @@ def attack_CW(model, X, y, epsilon, alpha, attack_iters, restarts,
                 break
 
             label_mask = one_hot_embedding(y, num_class) # this works
-            label_mask=label_mask.cuda()
+            label_mask=label_mask
 
             correct_logit = torch.sum(label_mask*output, dim=1)
             wrong_logit, _ = torch.max((1-label_mask)*output - 1e4*label_mask, axis=1)
@@ -545,6 +547,7 @@ def main():
     train_batches = Batches(train_set_x, args.batch_size, shuffle=True, set_random_choices=True, num_workers=2)
 
     test_set = list(zip(transpose(dataset['test']['data'] / 255.), dataset['test']['labels']))
+    test_set = test_set[:2048]
     test_batches = Batches(test_set, args.batch_size, shuffle=False, num_workers=2)
 
     epsilon = (args.epsilon / 255.)
@@ -557,7 +560,7 @@ def main():
 
         if args.attack_type=='AA':
             ori_model = PreActResNet18()
-            ori_model = nn.DataParallel(ori_model).cuda()
+            ori_model = nn.DataParallel(ori_model)
 
     elif args.model == 'WideResNet':
         # model = WideResNetMed_SSL(34, 10, widen_factor=args.width_factor, dropRate=0.0)
@@ -577,8 +580,8 @@ def main():
         raise ValueError("Unknown model")
 
     if not args.TRADES and not args.Bag:
-        model = nn.DataParallel(model).cuda()
-    c_head_model = nn.DataParallel(c_head_model).cuda()
+        model = nn.DataParallel(model)
+    c_head_model = nn.DataParallel(c_head_model)
     c_head_model.train()
 
 
@@ -617,14 +620,14 @@ def main():
     if args.md_path != '':
         # try:
         if args.TRADES or args.Bag:
-            tmp=torch.load(args.md_path)
+            tmp=torch.load(args.md_path, map_location=torch.device('cpu'))
         else:
-            tmp=torch.load(args.md_path)['state_dict']
+            tmp=torch.load(args.md_path, map_location=torch.device('cpu'))['state_dict']
 
         model.load_state_dict(tmp)
 
     if args.TRADES or args.Bag:
-        model = nn.DataParallel(model).cuda()
+        model = nn.DataParallel(model)
 
     # defines transformation for SSL contrastive learning.
     s = 1
@@ -632,7 +635,7 @@ def main():
     from torchvision.transforms import transforms
     # color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
     transforms = torch.nn.Sequential(
-        transforms.RandomResizedCrop(size=size),
+        transforms.RandomResizedCrop(size=size, antialias=True),
         transforms.RandomHorizontalFlip(),
         # transforms.RandomApply([color_jitter], p=0.8),
         transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s),
@@ -640,7 +643,7 @@ def main():
         # GaussianBlur(kernel_size=int(0.1 * size)),
     )
     scripted_transforms = torch.jit.script(transforms)
-    criterion = torch.nn.CrossEntropyLoss().cuda()
+    criterion = torch.nn.CrossEntropyLoss()
 
     model.eval()
     test_loss = 0
@@ -653,7 +656,7 @@ def main():
     # Train the SSL model first
     if not args.eval_only:
         flag=True
-        for epoch in range(0, 201):
+        for epoch in range(0, 1):
             model.eval()
             c_head_model.train()
 
@@ -661,12 +664,16 @@ def main():
             train_loss = 0.
 
             train_n=0
+            # train_batches = train_batches[:10]
             for i, batch in enumerate(train_batches):
                 X, y = batch['input'], batch['target']
+
+                X = X[:2]
 
                 contrastive_Loss = \
                     calculate_contrastive_Mhead_loss(X, scripted_transforms, model, criterion, c_head_model)
 
+                print(i, contrastive_Loss.item())
                 opt.zero_grad()
                 contrastive_Loss.backward()
                 opt.step()
@@ -691,11 +698,14 @@ def main():
                         break
 
                     X, y = batch['input'], batch['target']
+                    X = X[:2]
+                    y = y[:2]
                     TestX.append(X)
                     TestY.append(y)
 
                     # X_train_support = All_data[random.sample(list1, constrastive_bs)]
 
+                    print(i, X.size())
                     # Random initialization
                     if args.attack == 'none':
                         delta = torch.zeros_like(X)
@@ -762,9 +772,9 @@ def main():
                     y = TestY[bs_ind*bs:(bs_ind+1)*bs]
                     delta = Testdelta[bs_ind*bs:(bs_ind+1)*bs]
 
-                    X = X.cuda()
-                    y = y.cuda()
-                    delta = delta.cuda()
+                    X = X
+                    y = y
+                    delta = delta
 
                     # Need to calculate the contrastive here, i.e., as the training goes, because training change SSL contrastive branch model weights
                     Adv_image = torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit)
@@ -782,10 +792,15 @@ def main():
                                                        int(args.attack_iters * adda_times) if not args.rand else 0,
                                                        args.restarts, args.norm,
                                                        )
+                    print(delta2)
+                    print(delta2.size())
                     delta2 = delta2.detach()
 
                     robust_output_ada, hidden = model(
                         normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit) + delta2))
+
+                    print(robust_output_ada)
+                    print(robust_output_ada.size())
                     test_robust_ada_acc += (robust_output_ada.max(1)[1] == y).sum().item()
                     robust_ada_loss = criterion(robust_output_ada, y)
                     test_robust_ada_loss += robust_ada_loss.item() * y.size(0)
@@ -840,11 +855,11 @@ def main():
         if args.res18:
             # import pdb; pdb.set_trace()
             if args.new:
-                tmp = torch.load(args.ssl_model_path)['ssl_model']
+                tmp = torch.load(args.ssl_model_path, map_location=torch.device('cpu'))['ssl_model']
             else:
-                tmp = torch.load(args.ssl_model_path)
+                tmp = torch.load(args.ssl_model_path, map_location=torch.device('cpu'))
         else:
-            tmp = torch.load(args.ssl_model_path)['ssl_model']
+            tmp = torch.load(args.ssl_model_path, map_location=torch.device('cpu'))['ssl_model']
         c_head_model.load_state_dict(tmp)
         c_head_model.eval()
 
@@ -890,8 +905,8 @@ def main():
                 TestX.append(X)
                 TestY.append(y)
 
-                X = X.cuda()
-                y = y.cuda()
+                X = X
+                y = y
 
                 if args.attack_type == 'CW':
                     delta = attack_CW(model, X, y, epsilon, pgd_alpha, args.attack_iters, args.restarts, args.norm,
@@ -982,9 +997,9 @@ def main():
                         y = TestY[bs_ind * bs:(bs_ind + 1) * bs]
                         delta = Testdelta[bs_ind * bs:(bs_ind + 1) * bs]
 
-                        X = X.cuda()
-                        y = y.cuda()
-                        delta = delta.cuda()
+                        X = X
+                        y = y
+                        delta = delta
 
                         # Random initialization
                         if args.random_noise:
